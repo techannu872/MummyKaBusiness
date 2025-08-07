@@ -83,12 +83,19 @@
 
       // Send via WhatsApp
       function sendWhatsApp(phone, pdfData) {
-        const message = `Your milk bill:\nPackets: ${quantity}\nTotal: ₹${totalCost}`;
-        const whatsappUrl = `https://wa.me/+91${phone}?text=${encodeURIComponent(
-          message
-        )}`;
-        window.open(whatsappUrl, "_blank");
-      }
+  // 1. Ensure phone starts with country code (e.g., +91 for India)
+  if (!phone.startsWith('+')) {
+    phone = `+91${phone}`; // Default to India if no "+"
+  }
+
+  // 2. Create the WhatsApp link
+  const message = "Your milk bill is ready! Total: ₹" + 
+                 document.getElementById("totalCostValue").textContent;
+  const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+  
+  // 3. Open WhatsApp in a new tab
+  window.open(whatsappUrl, '_blank');
+}
 
       document
         .getElementById("quantity")
@@ -146,4 +153,5 @@
     </script>
   </body>
 </html>
+
 
