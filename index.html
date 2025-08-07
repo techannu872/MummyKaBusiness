@@ -115,26 +115,27 @@
       }
 
       // Save sale and send bill
-      function saveSale() {
-        const phone = document.getElementById("customerSelect").value;
-        const quantity = parseFloat(document.getElementById("quantity").value);
-        const costPerPacket = parseFloat(
-          document.getElementById("costPerPacket").value
-        );
-        const totalCost = parseFloat(
-          document.getElementById("totalCostValue").textContent
-        );
-        const customerName =
-          document.getElementById("customerSelect").selectedOptions[0].text;
+      async function saveSale() {
+  // Get current sale data (existing code)
+  const customerName = document.getElementById("customerSelect").selectedOptions[0].text;
+  const phone = document.getElementById("customerSelect").value;
+  
+  // Calculate monthly total
+  const currentDate = new Date();
+  const monthYear = `${currentDate.getFullYear()}-${currentDate.getMonth()+1}`;
+  const { monthlyPackets, monthlyCost } = await getMonthlySales(customerName, monthYear);
 
-        // 1. Save to Firebase
-        db.collection("sales").add({
-          customer: customerName,
-          quantity: quantity,
-          costPerPacket: costPerPacket,
-          totalCost: totalCost,
-          date: new Date(),
-        });
+  // Generate WhatsApp message (ONLY MONTHLY TOTAL)
+  const monthName = currentDate.toLocaleString('default', { month: 'long' });
+  const message = 
+    `*${customerName}'s ${monthName} Milk Bill*\n` +
+    `Total Packets: ${monthlyPackets}\n` +
+    `Total Amount: ₹${monthlyCost.toFixed(2)}\n\n` +
+    `Thank you! 🥛`;
+
+  // Open WhatsApp
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+}
 
         // 2. Generate PDF
         const pdfData = generatePDF(
@@ -153,5 +154,6 @@
     </script>
   </body>
 </html>
+
 
 
