@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Milk Sales App</title>
+    <!-- Firebase + Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-firestore.js"></script>
+    <!-- jsPDF for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+      body {
+        font-family: Arial;
+        padding: 20px;
+        max-width: 500px;
+        margin: auto;
+      }
+      input,
+      select,
+      button {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+      }
+      button {
+        background: #4caf50;
+        color: white;
+        border: none;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🥛 Milk Sales Tracker</h1>
+    <select id="customerSelect">
+      <option>Loading customers...</option>
+    </select>
+    <input type="number" id="quantity" placeholder="Number of packets" />
+    <input type="number" id="costPerPacket" placeholder="Cost per packet (₹)" />
+    <div id="totalCostDisplay" style="font-weight: bold; margin: 10px 0">
+      Total Cost: ₹<span id="totalCostValue">0</span>
+    </div>
+    <button onclick="saveSale()">Save & Send Bill</button>
+
+    <script>
+      // Firebase config (REPLACE WITH YOUR CONFIG)
+      const firebaseConfig = {
+        apiKey: "AIzaSyBqKLJjxZK0JNLcfDDdT6osUsLOZulSNJc",
+        authDomain: "mummykabusiness1.firebaseapp.com",
+        projectId: "mummykabusiness1",
+        storageBucket: "mummykabusiness1.firebasestorage.app",
+        messagingSenderId: "505480981906",
+        appId: "1:505480981906:web:54dae6cff7f89f8cb8e54b",
+      };
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+
+      // Load customers from Firebase
+      function loadCustomers() {
+        db.collection("customers")
+          .get()
+          .then((querySnapshot) => {
+            const select = document.getElementById("customerSelect");
+            select.innerHTML = "";
+            querySnapshot.forEach((doc) => {
+              const customer = doc.data();
+              select.innerHTML += `<option value="${customer.phone}">${customer.name}</option>`;
+            });
+          });
+      }
+
+      // Generate PDF Bill
+      function generatePDF(quantity, costPerPacket, totalCost, customerName) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text(`Milk Bill - ${customerName}`, 10, 10);
+        doc.setFontSize(12);
+        doc.text(`Packets: ${quantity}`, 10, 20);
+        doc.text(`Cost per packet: ₹${costPerPacket}`, 10, 30);
+        doc.text(`Total Cost: ₹${totalCost}`, 10, 40);
+        return doc.output("datauristring"); // Returns PDF as base64
+      }
+
+      // Send via WhatsApp
+      function sendWhatsApp(phone, pdfData) {
+        const message = `Your milk bill:\nPackets: ${quantity}\nTotal: ₹${totalCost}`;
+        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(
+          message
+        )}`;
+        window.open(whatsappUrl, "_blank");
+      }
+
+      document
+        .getElementById("quantity")
+        .addEventListener("input", updateTotal);
+      document
+        .getElementById("costPerPacket")
+        .addEventListener("input", updateTotal);
+
+      function updateTotal() {
+        const quantity =
+          parseFloat(document.getElementById("quantity").value) || 0;
+        const costPerPacket =
+          parseFloat(document.getElementById("costPerPacket").value) || 0;
+        const totalCost = quantity * costPerPacket;
+        document.getElementById("totalCostValue").textContent =
+          totalCost.toFixed(2);
+      }
+
+      // Save sale and send bill
+      function saveSale() {
+        const phone = document.getElementById("customerSelect").value;
+        const quantity = parseFloat(document.getElementById("quantity").value);
+        const costPerPacket = parseFloat(
+          document.getElementById("costPerPacket").value
+        );
+        const totalCost = parseFloat(
+          document.getElementById("totalCostValue").textContent
+        );
+        const customerName =
+          document.getElementById("customerSelect").selectedOptions[0].text;
+
+        // 1. Save to Firebase
+        db.collection("sales").add({
+          customer: customerName,
+          quantity: quantity,
+          costPerPacket: costPerPacket,
+          totalCost: totalCost,
+          date: new Date(),
+        });
+
+        // 2. Generate PDF
+        const pdfData = generatePDF(
+          quantity,
+          costPerPacket,
+          totalCost,
+          customerName
+        );
+
+        // 3. Send via WhatsApp
+        sendWhatsApp(phone, pdfData);
+      }
+
+      // Initialize
+      loadCustomers();
+    </script>
+  </body>
+</html>
