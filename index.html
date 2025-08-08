@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Milk Sales App</title>
-    <!-- Firebase + Firestore -->
+    <title>Milk Sales Tracker</title>
+    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-firestore.js"></script>
-    <!-- jsPDF for PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
       body {
         font-family: Arial;
@@ -14,8 +12,8 @@
         max-width: 500px;
         margin: auto;
       }
-      input,
       select,
+      input,
       button {
         width: 100%;
         padding: 10px;
@@ -30,19 +28,22 @@
     </style>
   </head>
   <body>
-    <h1>🥛 Milk Sales Tracker</h1>
+    <h1>🥛 Milk Sales</h1>
+
+    <!-- Customer Dropdown -->
     <select id="customerSelect">
       <option>Loading customers...</option>
     </select>
-    <input type="number" id="quantity" placeholder="Number of packets" />
+
+    <!-- Sales Input -->
+    <input type="number" id="quantity" placeholder="Packets sold today" />
     <input type="number" id="costPerPacket" placeholder="Cost per packet (₹)" />
-    <div id="totalCostDisplay" style="font-weight: bold; margin: 10px 0">
-      Total Cost: ₹<span id="totalCostValue">0</span>
-    </div>
-    <button onclick="saveSale()">Save & Send Bill</button>
+    <button onclick="saveSale()">Generate Monthly Bill</button>
 
     <script>
-      // Firebase config (REPLACE WITH YOUR CONFIG)
+      // ====================
+      // Firebase Configuration (REPLACE WITH YOUR CONFIG)
+      // ====================
       const firebaseConfig = {
         apiKey: "AIzaSyBqKLJjxZK0JNLcfDDdT6osUsLOZulSNJc",
         authDomain: "mummykabusiness1.firebaseapp.com",
@@ -54,106 +55,112 @@
       firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
 
-      // Load customers from Firebase
+      // ====================
+      // Load Customers (Fixes dropdown issue)
+      // ====================
       function loadCustomers() {
         db.collection("customers")
           .get()
           .then((querySnapshot) => {
             const select = document.getElementById("customerSelect");
             select.innerHTML = "";
+
+            // Add default option
+            select.innerHTML += '<option value="">Select Customer</option>';
+
+            // Add customers from Firebase
             querySnapshot.forEach((doc) => {
               const customer = doc.data();
-              select.innerHTML += `<option value="${customer.phone}">${customer.name}</option>`;
+              select.innerHTML += `
+            <option value="${customer.phone}">
+              ${customer.name}
+            </option>
+          `;
             });
+          })
+          .catch((error) => {
+            console.error("Error loading customers:", error);
           });
       }
 
-      // Generate PDF Bill
-      function generatePDF(quantity, costPerPacket, totalCost, customerName) {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        doc.setFontSize(16);
-        doc.text(`Milk Bill - ${customerName}`, 10, 10);
-        doc.setFontSize(12);
-        doc.text(`Packets: ${quantity}`, 10, 20);
-        doc.text(`Cost per packet: ₹${costPerPacket}`, 10, 30);
-        doc.text(`Total Cost: ₹${totalCost}`, 10, 40);
-        return doc.output("datauristring"); // Returns PDF as base64
+      // ====================
+      // Get Monthly Sales
+      // ====================
+      async function getMonthlySales(customerName) {
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+        const snapshot = await db
+          .collection("sales")
+          .where("customer", "==", customerName)
+          .where("date", ">=", firstDay)
+          .where("date", "<=", lastDay)
+          .get();
+
+        let totalPackets = 0;
+        let totalCost = 0;
+
+        snapshot.forEach((doc) => {
+          const sale = doc.data();
+          totalPackets += sale.quantity;
+          totalCost += sale.totalCost;
+        });
+
+        return { totalPackets, totalCost };
       }
 
-      // Send via WhatsApp
-      function sendWhatsApp(phone, pdfData) {
-  // 1. Ensure phone starts with country code (e.g., +91 for India)
-  if (!phone.startsWith('+')) {
-    phone = `+91${phone}`; // Default to India if no "+"
-  }
-
-  // 2. Create the WhatsApp link
-  const message = "Your milk bill is ready! Total: ₹" + 
-                 document.getElementById("totalCostValue").textContent;
-  const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-  
-  // 3. Open WhatsApp in a new tab
-  window.open(whatsappUrl, '_blank');
-}
-
-      document
-        .getElementById("quantity")
-        .addEventListener("input", updateTotal);
-      document
-        .getElementById("costPerPacket")
-        .addEventListener("input", updateTotal);
-
-      function updateTotal() {
-        const quantity =
-          parseFloat(document.getElementById("quantity").value) || 0;
-        const costPerPacket =
-          parseFloat(document.getElementById("costPerPacket").value) || 0;
-        const totalCost = quantity * costPerPacket;
-        document.getElementById("totalCostValue").textContent =
-          totalCost.toFixed(2);
-      }
-
-      // Save sale and send bill
+      // ====================
+      // Save Sale and Send Bill
+      // ====================
       async function saveSale() {
-  // Get current sale data (existing code)
-  const customerName = document.getElementById("customerSelect").selectedOptions[0].text;
-  const phone = document.getElementById("customerSelect").value;
-  
-  // Calculate monthly total
-  const currentDate = new Date();
-  const monthYear = `${currentDate.getFullYear()}-${currentDate.getMonth()+1}`;
-  const { monthlyPackets, monthlyCost } = await getMonthlySales(customerName, monthYear);
-
-  // Generate WhatsApp message (ONLY MONTHLY TOTAL)
-  const monthName = currentDate.toLocaleString('default', { month: 'long' });
-  const message = 
-    `*${customerName}'s ${monthName} Milk Bill*\n` +
-    `Total Packets: ${monthlyPackets}\n` +
-    `Total Amount: ₹${monthlyCost.toFixed(2)}\n\n` +
-    `Thank you! 🥛`;
-
-  // Open WhatsApp
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
-}
-
-        // 2. Generate PDF
-        const pdfData = generatePDF(
-          quantity,
-          costPerPacket,
-          totalCost,
-          customerName
+        const customerName =
+          document.getElementById("customerSelect").selectedOptions[0].text;
+        const phone = document.getElementById("customerSelect").value;
+        const quantity = parseFloat(document.getElementById("quantity").value);
+        const costPerPacket = parseFloat(
+          document.getElementById("costPerPacket").value
         );
 
-        // 3. Send via WhatsApp
-        sendWhatsApp(phone, pdfData);
+        if (!customerName || !phone) {
+          alert("Please select a customer!");
+          return;
+        }
+
+        // Save current sale
+        await db.collection("sales").add({
+          customer: customerName,
+          quantity: quantity,
+          costPerPacket: costPerPacket,
+          totalCost: quantity * costPerPacket,
+          date: new Date(),
+        });
+
+        // Get monthly total
+        const { totalPackets, totalCost } = await getMonthlySales(customerName);
+        const monthName = new Date().toLocaleString("default", {
+          month: "long",
+        });
+
+        // Send WhatsApp message
+        const message =
+          `*${customerName}'s ${monthName} Milk Bill*\n\n` +
+          `Total Packets: ${totalPackets}\n` +
+          `Total Amount: ₹${totalCost.toFixed(2)}\n\n` +
+          `Thank you! 🥛`;
+
+        window.open(
+          `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+          "_blank"
+        );
       }
 
-      // Initialize
-      loadCustomers();
+      // ====================
+      // Initialize the App
+      // ====================
+      window.onload = function () {
+        loadCustomers(); // Load customers when page opens
+      };
     </script>
   </body>
 </html>
-
-
-
